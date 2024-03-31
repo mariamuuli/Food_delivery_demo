@@ -1,124 +1,98 @@
-/*
- * TimelineApiSample
- * Example to show how to call the Visual Crossing Timeline Weather API using Java.
- * See https://www.visualcrossing.com/resources/documentation/weather-api/how-to-use-timeline-weather-api-to-retrieve-historical-weather-data-and-weather-forecast-data-in-java/
- */
+package com.example.food_delivery;
+import org.w3c.dom.Document;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
 
-
-
-import java.io.BufferedReader;
-import java.io.DataOutputStream;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.InputStream;
 import java.net.URL;
-import java.net.URLEncoder;
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
-
-import org.apache.http.HttpEntity;
-import org.apache.http.HttpStatus;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.utils.URIBuilder;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
-import org.apache.http.util.EntityUtils;
-import org.json.JSONArray;
-import org.json.JSONObject;
 
 
-public class TimelineApiForecastSample {
+public class WeatherService {
 
 
-
-    public static void timelineRequestHttpClient() throws Exception {
-        //set up the end point
-        String apiEndPoint="https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/";
-        String location="London,UK";
-        String startDate=null;
-        String endDate=null;
-
-        String unitGroup="metric";
-        String apiKey="YOUR_API_KEY";
-
-        StringBuilder requestBuilder=new StringBuilder(apiEndPoint);
-        requestBuilder.append(URLEncoder.encode(location, StandardCharsets.UTF_8.toString()));
-
-        if (startDate!=null && !startDate.isEmpty()) {
-            requestBuilder.append("/").append(startDate);
-            if (endDate!=null && !endDate.isEmpty()) {
-                requestBuilder.append("/").append(endDate);
-            }
+    public Weather getWeatherData(String location) {
+        System.out.println("Getting weather data..");
+        if (location.equals("Tallinn")) {
+            location = "Tallinn-Harku";
+        }
+        if (location.equals("Tartu")) {
+            location = "Tartu-Tõravere";
         }
 
-        URIBuilder builder = new URIBuilder(requestBuilder.toString());
-
-        builder.setParameter("unitGroup", unitGroup)
-                .setParameter("key", apiKey);
-
-
-
-        HttpGet get = new HttpGet(builder.build());
-
-        CloseableHttpClient httpclient = HttpClients.createDefault();
-
-        CloseableHttpResponse response = httpclient.execute(get);
-
-        String rawResult=null;
         try {
-            if (response.getStatusLine().getStatusCode() != HttpStatus.SC_OK) {
-                System.out.printf("Bad response status code:%d%n", response.getStatusLine().getStatusCode());
-                return;
+            URL url = new URL("https://www.ilmateenistus.ee/ilma_andmed/xml/observations.php");
+            InputStream is = url.openStream();
+            DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
+            DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
+            Document doc = dBuilder.parse(is);
+            doc.getDocumentElement().normalize();
+
+            // Pärin kõik "station" objektid XML-ist
+            NodeList stationNodes = doc.getElementsByTagName("station");
+
+            // Siin on muutujad, mida küsitud on
+            String nameOfStation = ""; //Name of the station
+            String wmoCodeOfStation = ""; // WMO code of the station
+            String airTemperature = ""; // Air temperature
+            String windSpeed = ""; // Wind speed
+            String weatherPhenomenon = ""; // Weather phenomenon
+            Long timestamp = 0L; // Timestamp of the observations
+
+            // Itereerin üle "station" objektide
+            for (int i = 0; i < stationNodes.getLength(); i++) {
+                Node stationNode = stationNodes.item(i);
+                // System.out.println(stationNode.getNodeName());
+                NodeList stationElements = stationNode.getChildNodes();
+
+                // Filter out only the stations that we are interested in:
+                for (int j = 0; j < stationElements.getLength(); j++) {
+                    Node nameElement = stationElements.item(j);
+                    if (location.equals(nameElement.getTextContent())) {
+                        for (int k = 0; k < stationElements.getLength(); k++) {
+
+                            Node nameElementInner = stationElements.item(k);
+                            if (nameElementInner.getNodeName().equals("wmocode")) {
+                                wmoCodeOfStation = nameElementInner.getTextContent();
+                            }
+                            if (nameElementInner.getNodeName().equals("airtemperature")) {
+                                airTemperature = nameElementInner.getTextContent();
+                            }
+                            if (nameElementInner.getNodeName().equals("windspeed")) {
+                                windSpeed = nameElementInner.getTextContent();
+                            }
+                            if (nameElementInner.getNodeName().equals("phenomenon")) {
+                                weatherPhenomenon = nameElementInner.getTextContent();
+                            }
+                        }
+
+                        System.out.println("Found the station element: " + nameElement.getTextContent());
+                        System.out.println("Found the wmoCodeOfStation element: " + wmoCodeOfStation);
+                        System.out.println("Found the airTemperature element: " + airTemperature);
+                        System.out.println("Found the windSpeed element: " + windSpeed);
+                        System.out.println("Found the weatherPhenomenon element: " + weatherPhenomenon);
+                        System.out.println();
+                        Weather weather = new Weather();
+                        weather.setLocation(location);
+                        weather.setTemperature(Double.valueOf(airTemperature));
+                        weather.setWmoCodeOfStation(wmoCodeOfStation);
+                        weather.setWindSpeed(Double.valueOf(windSpeed));
+                        weather.setWeatherPhenomenon(weatherPhenomenon);
+                        return weather;
+                        //weatherRepository.save(weather);
+
+                        //repository.save(weather);
+                        //repository.findWeatherByLocation("Tallinn-Harku");
+                        //System.out.println(WeatherRepository.findWeatherByLocation("Tallinn-Harku");
+                    }
+                }
             }
 
-            HttpEntity entity = response.getEntity();
-            if (entity != null) {
-                rawResult=EntityUtils.toString(entity, Charset.forName("utf-8"));
-            }
-
-
-        } finally {
-            response.close();
+        } catch (Exception e) {
+            e.printStackTrace();
         }
-
-        parseTimelineJson(rawResult);
-
-    }
-    private static void parseTimelineJson(String rawResult) {
-
-        if (rawResult==null || rawResult.isEmpty()) {
-            System.out.printf("No raw data%n");
-            return;
-        }
-
-        JSONObject timelineResponse = new JSONObject(rawResult);
-
-        ZoneId zoneId=ZoneId.of(timelineResponse.getString("timezone"));
-
-        System.out.printf("Weather data for: %s%n", timelineResponse.getString("resolvedAddress"));
-
-        JSONArray values=timelineResponse.getJSONArray("days");
-
-        System.out.printf("Date\tMaxTemp\tMinTemp\tPrecip\tSource%n");
-        for (int i = 0; i < values.length(); i++) {
-            JSONObject dayValue = values.getJSONObject(i);
-
-            ZonedDateTime datetime=ZonedDateTime.ofInstant(Instant.ofEpochSecond(dayValue.getLong("datetimeEpoch")), zoneId);
-
-            double maxtemp=dayValue.getDouble("tempmax");
-            double mintemp=dayValue.getDouble("tempmin");
-            double pop=dayValue.getDouble("precip");
-            String source=dayValue.getString("source");
-            System.out.printf("%s\t%.1f\t%.1f\t%.1f\t%s%n", datetime.format(DateTimeFormatter.ISO_LOCAL_DATE), maxtemp, mintemp, pop,source );
-        }
+        return null;
     }
 
-
-    public static void main(String[] args)  throws Exception {
-        TimelineApiForecastSample.timelineRequestHttpClient();
-    }
 }
